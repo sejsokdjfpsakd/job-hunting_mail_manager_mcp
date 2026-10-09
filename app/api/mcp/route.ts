@@ -236,18 +236,24 @@ async function withAuth(req: NextRequest) {
   if (!authHeader?.startsWith("Bearer ")) {
     return new NextResponse(null, {
       status: 401,
-      headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token"` }
+      headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token", resource_metadata="${config.PUBLIC_BASE_URL}/.well-known/oauth-protected-resource"` }
     });
   }
 
   const token = authHeader.substring(7);
+  
+  // シングルユーザー向け: RENTAL_API_KEY を直接指定してきた場合はJWT検証をスキップ
+  if (token === config.RENTAL_API_KEY) {
+    return mcpHandler(req);
+  }
+
   try {
     const payload = await verifyJWT(token, config.OAUTH_BRIDGE_SECRET, 'mcp_server');
     return mcpHandler(req);
   } catch (e) {
     return new NextResponse(null, {
       status: 401,
-      headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token"` }
+      headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token", resource_metadata="${config.PUBLIC_BASE_URL}/.well-known/oauth-protected-resource"` }
     });
   }
 }
