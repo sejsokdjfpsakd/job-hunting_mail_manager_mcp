@@ -233,14 +233,21 @@ async function withAuth(req: NextRequest) {
   }
 
   const authHeader = req.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new NextResponse(null, {
+  console.log("[MCP Auth Debug] Incoming Request Method:", req.method);
+  console.log("[MCP Auth Debug] Authorization Header:", authHeader ? "Present (Hidden for security)" : "Missing");
+  console.log("[MCP Auth Debug] All Headers:", JSON.stringify(Object.fromEntries(req.headers.entries())));
+
+  if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
+    console.error("[MCP Auth Debug] Missing or invalid Authorization header scheme.");
+    return NextResponse.json({ error: "Unauthorized" }, {
       status: 401,
       headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token", resource_metadata="${config.PUBLIC_BASE_URL}/.well-known/oauth-protected-resource"` }
     });
   }
 
-  const token = authHeader.substring(7);
+  // extract token regardless of case
+  const match = authHeader.match(/^bearer\s+(.*)$/i);
+  const token = match ? match[1] : "";
   
   // シングルユーザー向け: RENTAL_API_KEY を直接指定してきた場合はJWT検証をスキップ
   if (token === config.RENTAL_API_KEY) {
@@ -249,9 +256,11 @@ async function withAuth(req: NextRequest) {
 
   try {
     const payload = await verifyJWT(token, config.OAUTH_BRIDGE_SECRET, 'mcp_server');
+    console.log("[MCP Auth Debug] JWT verified successfully for grant:", payload.sub);
     return mcpHandler(req);
-  } catch (e) {
-    return new NextResponse(null, {
+  } catch (e: any) {
+    console.error("[MCP Auth Debug] JWT verification failed:", e.message || e);
+    return NextResponse.json({ error: "Invalid token" }, {
       status: 401,
       headers: { 'WWW-Authenticate': `Bearer realm="MCP", error="invalid_token", resource_metadata="${config.PUBLIC_BASE_URL}/.well-known/oauth-protected-resource"` }
     });
