@@ -6,8 +6,12 @@ import { verifyJWT } from '../../../lib/tokens';
 import { config } from '../../../lib/config';
 
 function getToken(ctx: any): string {
-  const auth = ctx.http?.request.headers.get("authorization");
-  if (auth?.startsWith("Bearer ")) {
+  if (ctx?.http?.authInfo?.token) {
+    return ctx.http.authInfo.token;
+  }
+  
+  const auth = ctx?.http?.request?.headers?.get("authorization");
+  if (auth?.toLowerCase().startsWith("bearer ")) {
     return auth.substring(7);
   }
   if (process.env.DEV_BYPASS_AUTH === "true") {
@@ -229,6 +233,7 @@ const mcpHandler = createMcpHandler((server) => {
 async function withAuth(req: NextRequest) {
   // ローカル開発・検証モード: DEV_BYPASS_AUTHがtrueの場合は認証をパス
   if (process.env.DEV_BYPASS_AUTH === "true") {
+    (req as any).auth = { token: "dev_token" };
     return mcpHandler(req);
   }
 
@@ -251,12 +256,14 @@ async function withAuth(req: NextRequest) {
   
   // シングルユーザー向け: RENTAL_API_KEY を直接指定してきた場合はJWT検証をスキップ
   if (token === config.RENTAL_API_KEY) {
+    (req as any).auth = { token };
     return mcpHandler(req);
   }
 
   try {
     const payload = await verifyJWT(token, config.OAUTH_BRIDGE_SECRET, 'mcp_server');
     console.log("[MCP Auth Debug] JWT verified successfully for grant:", payload.sub);
+    (req as any).auth = { token };
     return mcpHandler(req);
   } catch (e: any) {
     console.error("[MCP Auth Debug] JWT verification failed:", e.message || e);
